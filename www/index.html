@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>百度一下，你就知道</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='36' fill='%234e6ef2'/><ellipse cx='90' cy='120' rx='32' ry='26' fill='white'/><circle cx='46' cy='52' r='19' fill='white'/><circle cx='86' cy='35' r='19' fill='white'/><circle cx='126' cy='46' r='17' fill='white'/><circle cx='148' cy='76' r='14' fill='white'/></svg>">
+<script src="storage.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .baidu-page { display: flex; flex-direction: column; align-items: center; padding-top: 10vh; min-height: 100%; background: #fff; }
+  .baidu-logo-wrap { width: 200px; height: 70px; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; }
+  .baidu-logo-wrap img { width: 172px; height: auto; }
+  .search-wrapper { width: 88%; max-width: 540px; position: relative; }
+  .search-box { width: 100%; height: 42px; padding: 0 80px 0 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; outline: none; -webkit-appearance: none; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .search-box:focus { border-color: #4e6ef2; box-shadow: 0 1px 6px rgba(78,110,242,0.15); }
+  .search-btn { position: absolute; right: 4px; top: 4px; width: 64px; height: 34px; border: none; border-radius: 7px; background: #4e6ef2; color: #fff; font-size: 14px; cursor: pointer; }
+  .baidu-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; margin-top: 20px; padding: 0 16px; max-width: 440px; }
+  .baidu-links a { font-size: 13px; color: #666; text-decoration: none; }
+  .baidu-footer { text-align: center; padding: 30px 16px 40px; font-size: 11px; color: #bbb; line-height: 1.8; }
+  .hidden { display: none !important; }
+  .list-page { background: #f5f5f5; min-height: 100%; padding-bottom: 80px; }
+  .list-header { position: sticky; top: 0; z-index: 10; background: #fff; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eee; padding-top: max(12px, env(safe-area-inset-top)); }
+  .list-header h1 { font-size: 20px; color: #333; }
+  .list-header-actions { display: flex; gap: 8px; }
+  .list-header-actions button { padding: 6px 12px; border: 1px solid #ddd; border-radius: 6px; background: #fff; font-size: 13px; cursor: pointer; color: #666; }
+  .comic-list { padding: 12px 16px; }
+  .comic-item { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 10px; display: flex; gap: 12px; align-items: center; box-shadow: 0 1px 4px rgba(0,0,0,0.04); cursor: pointer; transition: transform 0.1s; }
+  .comic-item:active { transform: scale(0.98); }
+  .comic-cover { width: 56px; height: 76px; border-radius: 6px; background: #eee; flex-shrink: 0; object-fit: cover; }
+  .comic-cover-placeholder { width: 56px; height: 76px; border-radius: 6px; background: linear-gradient(135deg, #4e6ef2, #6c8aff); flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 24px; }
+  .comic-info { flex: 1; min-width: 0; }
+  .comic-info .name { font-size: 15px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .comic-info .meta { font-size: 12px; color: #999; margin-top: 4px; }
+  .comic-item .delete-btn { padding: 6px 8px; border: none; background: none; color: #ccc; font-size: 18px; cursor: pointer; }
+  .empty-state { text-align: center; padding: 60px 20px; color: #999; }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  .import-btn-bottom { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 12px 32px; border: none; border-radius: 24px; background: #4e6ef2; color: #fff; font-size: 15px; cursor: pointer; box-shadow: 0 4px 16px rgba(78,110,242,0.35); z-index: 10; }
+  .toast { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.78); color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 14px; z-index: 999; animation: toastIn 0.3s ease; }
+  @keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(-10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+  .reader-page { background: #1a1a1a; min-height: 100%; color: #fff; }
+  .reader-topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 20; display: flex; align-items: center; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); background: rgba(0,0,0,0.85); gap: 10px; transition: transform 0.25s; }
+  .reader-topbar.hidden-bar { transform: translateY(-100%); }
+  .reader-topbar .back-btn { background: none; border: none; color: #fff; font-size: 18px; cursor: pointer; padding: 4px 8px; }
+  .reader-topbar .title { flex:1; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .reader-topbar .page-indicator { font-size: 13px; color: #aaa; min-width: 60px; text-align: right; }
+  .reader-content { padding-top: 50px; padding-bottom: 40px; }
+  .page-separator { text-align: center; padding: 16px 0 8px; color: #888; font-size: 12px; letter-spacing: 2px; user-select: none; }
+  .page-img-wrap { position: relative; overflow: auto; display: flex; justify-content: center; -webkit-overflow-scrolling: touch; }
+  .page-img { display: block; width: 100%; height: auto; user-select: none; min-height: 50vh; -webkit-user-drag: none; }
+  .page-img[src=""] { min-height: 50vh; background: #222; }
+  .reader-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: #888; }
+  .reader-loading .spinner { width: 36px; height: 36px; border: 3px solid #333; border-top-color: #4e6ef2; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .scrollbar-track { position: fixed; right: 2px; top: 10vh; bottom: 5vh; width: 6px; z-index: 25; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .scrollbar-track.visible { opacity: 1; pointer-events: auto; }
+  .scrollbar-thumb { position: absolute; left: 0; width: 100%; background: rgba(255,255,255,0.35); border-radius: 3px; min-height: 40px; cursor: pointer; }
+  .scrollbar-thumb:active { background: rgba(255,255,255,0.6); }
+  .chapter-separator { text-align: center; padding: 24px 0 12px; color: #4e6ef2; font-size: 16px; font-weight: 700; letter-spacing: 2px; user-select: none; border-bottom: 1px solid #333; margin: 0 16px 12px; }
+  .next-chapter-link { text-align: center; padding: 16px 0 24px; cursor: pointer; color: #4e6ef2; font-size: 14px; user-select: none; }
+  .chapter-overlay { position: fixed; top:0; left:0; right:0; bottom:0; z-index: 30; background: rgba(0,0,0,0.7); display: flex; align-items: flex-start; justify-content: center; padding-top: 60px; }
+  .chapter-menu { background: #222; border-radius: 14px; width: 85%; max-width: 340px; max-height: 70vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+  .chapter-menu-title { padding: 16px; text-align: center; font-size: 16px; font-weight: 700; color: #fff; border-bottom: 1px solid #333; }
+  .chapter-menu-item { padding: 14px 16px; font-size: 14px; color: #ccc; border-bottom: 1px solid #2a2a2a; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+  .chapter-menu-item.current { color: #4e6ef2; font-weight: 700; }
+  .chapter-menu-item .badge { font-size: 11px; color: #888; }
+  .chapter-menu-close { text-align: center; padding: 14px; color: #888; font-size: 14px; cursor: pointer; border-top: 1px solid #333; }
+</style>
+</head>
+<body>
+
+  <div id="baiduPage" class="baidu-page">
+    <div class="baidu-logo-wrap">
+      <img src="https://www.baidu.com/img/PCtm_d9c8750bed0b3c7d089fa7d55720d6cf.png" alt="百度" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+      <svg viewBox="0 0 520 140" width="172" xmlns="http://www.w3.org/2000/svg" style="display:none">
+        <text x="0" y="105" font-size="140" font-weight="700" fill="#2932e1" font-family="Arial">Baidu</text>
+        <text x="245" y="108" font-size="40" fill="#2932e1" font-family="Arial, sans-serif">百度</text>
+      </svg>
+    </div>
+    <div class="search-wrapper">
+      <input id="searchInput" class="search-box" type="text" placeholder="百度一下" autocomplete="off" autocorrect="off">
+      <button id="searchBtn" class="search-btn">百度一下</button>
+    </div>
+    <div class="baidu-links">
+      <a href="https://news.baidu.com">新闻</a><a href="https://www.hao123.com">hao123</a><a href="https://map.baidu.com">地图</a><a href="https://tieba.baidu.com">贴吧</a><a href="https://haokan.baidu.com">视频</a><a href="https://image.baidu.com">图片</a><a href="https://pan.baidu.com">网盘</a><a href="https://wenku.baidu.com">文库</a><a href="https://www.baidu.com/more">更多</a>
+    </div>
+    <div class="baidu-footer">©2026 Baidu&nbsp;&nbsp;使用百度前必读&nbsp;&nbsp;京ICP证030173号<br>京公网安备11000002000001号</div>
+  </div>
+
+  <div id="listPage" class="list-page hidden">
+    <div class="list-header"><h1>📚 我的漫画</h1><div class="list-header-actions"><button id="exportBtn">📤 导出备份</button><button id="importBackupBtn">📥 导入备份</button></div></div>
+    <div id="comicList" class="comic-list"></div>
+    <button id="importBtn" class="import-btn-bottom">＋ 导入漫画</button>
+    <input id="fileInput" type="file" accept=".zip,.cbz" style="display:none">
+    <input id="backupInput" type="file" style="display:none">
+  </div>
+
+  <div id="readerPage" class="reader-page hidden">
+    <div id="readerTopbar" class="reader-topbar">
+      <button class="back-btn" onclick="closeReader()">← 返回</button>
+      <span class="title" id="readerTitle" onclick="showChapterMenu()" style="cursor:pointer;user-select:none"></span>
+      <span class="page-indicator" id="pageIndicator">0/0</span>
+    </div>
+    <div id="readerContent" class="reader-content"></div>
+    <div id="scrollbar" class="scrollbar-track"><div id="scrollbarThumb" class="scrollbar-thumb"></div></div>
+    <div id="readerLoading" class="reader-loading"><div class="spinner"></div><span>加载中...</span></div>
+  </div>
+
+<script>
+// ===== 全局状态 =====
+const BAIDU_SEARCH = 'https://www.baidu.com/s?wd=';
+const APP_PASSWORD = '795531';
+let S = null; // storage API
+
+// ===== 页面切换 =====
+function showPage(id) {
+  document.querySelectorAll('.baidu-page, .list-page, .reader-page').forEach(el => el.classList.add('hidden'));
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('hidden');
+}
+
+// ===== 百度搜索框 =====
+const searchInput = document.getElementById('searchInput');
+const searchBtn = document.getElementById('searchBtn');
+function doSearch() {
+  const val = searchInput.value.trim();
+  if (!val) return;
+  if (val === APP_PASSWORD) { searchInput.value = ''; showComicList(); return; }
+  window.location.href = BAIDU_SEARCH + encodeURIComponent(val);
+}
+searchBtn.addEventListener('click', doSearch);
+searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+// ===== Toast =====
+function toast(msg) {
+  const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2000);
+}
+
+// ===== 漫画管理 =====
+async function showComicList() { showPage('listPage'); await renderComicList(); }
+
+async function renderComicList() {
+  const container = document.getElementById('comicList');
+  const comics = await S.getAllComics();
+  if (comics.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>还没有漫画<br>点击下方按钮导入</p></div>';
+    return;
+  }
+  comics.sort((a, b) => b.addedAt - a.addedAt);
+  container.innerHTML = comics.map(c => {
+    const date = new Date(c.addedAt).toLocaleDateString('zh-CN');
+    const coverHTML = c.cover
+      ? `<img class="comic-cover" data-cid="${c.id}" src="">`
+      : '<div class="comic-cover-placeholder">📖</div>';
+    return `<div class="comic-item" data-id="${c.id}" onclick="openComic(${c.id})">${coverHTML}<div class="comic-info"><div class="name">${escHtml(c.name)}</div><div class="meta">${date} · ${c.progress > 0 ? '已读至第' + c.progress + '页' : '未读'}</div></div><button class="delete-btn" onclick="event.stopPropagation();onDelete(${c.id})">🗑</button></div>`;
+  }).join('');
+  // 加载封面
+  comics.forEach(async c => {
+    if (!c.cover) return;
+    const cover = await S.getComicCover(c.id);
+    if (cover) {
+      const img = document.querySelector(`img[data-cid="${c.id}"]`);
+      if (img) img.src = URL.createObjectURL(cover);
+    }
+  });
+}
+
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// ===== 导入漫画 =====
+document.getElementById('importBtn').addEventListener('click', () => document.getElementById('fileInput').click());
+document.getElementById('fileInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  toast('正在导入...');
+  try {
+    let coverBlob = null;
+    if (file.size < 100 * 1024 * 1024) {
+      try {
+        const zip = await JSZip.loadAsync(file);
+        const imgs = Object.keys(zip.files).filter(n => /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(n) && !zip.files[n].dir).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+        if (imgs.length > 0) {
+          const b = await zip.files[imgs[0]].async('blob');
+          coverBlob = await createThumbnail(b, 120);
+        }
+      } catch {}
+    }
+    await S.saveComic(file.name, file, coverBlob);
+    toast('✅ 导入成功！');
+    await renderComicList();
+  } catch (err) { toast('❌ 导入失败：' + err.message); }
+  e.target.value = '';
+});
+
+function createThumbnail(blob, maxW) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => { URL.revokeObjectURL(url); const h = Math.max(10, Math.round(img.height * maxW / img.width)); const c = document.createElement('canvas'); c.width = maxW; c.height = h; c.getContext('2d').drawImage(img, 0, 0, maxW, h); c.toBlob(resolve, 'image/jpeg', 0.7); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('缩略图生成失败')); };
+    img.src = url;
+  });
+}
+
+// ===== 删除漫画 =====
+async function onDelete(id) {
+  if (!confirm('确定删除这部漫画？此操作不可恢复。')) return;
+  await S.deleteComic(id);
+  toast('已删除');
+  await renderComicList();
+}
+
+// ===== 导出/导入备份 =====
+document.getElementById('exportBtn').addEventListener('click', async () => {
+  try {
+    const comics = await S.getAllComics();
+    if (comics.length === 0) { toast('没有漫画可导出'); return; }
+    toast('正在打包...');
+    let headerSize = 8;
+    for (const c of comics) headerSize += 4 + (new TextEncoder().encode(c.name)).length + 4;
+    const hBuf = new Uint8Array(headerSize);
+    const hv = new DataView(hBuf.buffer);
+    hv.setUint32(0, comics.length, true);
+    hv.setUint32(4, headerSize, true);
+    const parts = [hBuf];
+    let off = 8;
+    for (const c of comics) {
+      const nb = new TextEncoder().encode(c.name);
+      hv.setUint32(off, nb.length, true); off += 4;
+      hBuf.set(nb, off); off += nb.length;
+      hv.setUint32(off, c.dataSize, true); off += 4;
+      const chunks = await S.getComicChunks(c.id, c.chunkCount);
+      parts.push(...chunks);
+    }
+    const blob = new Blob(parts, { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'comic-backup-' + new Date().toISOString().slice(0,10) + '.cbackup';
+    a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('✅ 备份已导出');
+  } catch (err) { toast('❌ ' + err.message); }
+});
+
+document.getElementById('importBackupBtn').addEventListener('click', () => document.getElementById('backupInput').click());
+document.getElementById('backupInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const buf = await file.arrayBuffer();
+    const view = new DataView(buf);
+    const count = view.getUint32(0, true);
+    if (count <= 0 || count > 5000) throw new Error('不支持的文件格式');
+    const headerSize = view.getUint32(4, true);
+    if (headerSize >= file.size) throw new Error('格式错误');
+    const data = new Uint8Array(buf);
+    let off = 8, dataOff = headerSize;
+    for (let i = 0; i < count; i++) {
+      const nLen = view.getUint32(off, true); off += 4;
+      const name = new TextDecoder().decode(data.slice(off, off + nLen)); off += nLen;
+      const dLen = view.getUint32(off, true); off += 4;
+      const blob = file.slice(dataOff, dataOff + dLen);
+      await S.saveComic(name, blob, null);
+      dataOff += dLen;
+    }
+    toast('✅ 导入 ' + count + ' 部漫画');
+    await renderComicList();
+  } catch (err) { toast('❌ 导入失败：' + err.message); }
+  e.target.value = '';
+});
+
+// ===== 阅读器 =====
+let currentComicId = null, currentPages = [], currentChapters = [], currentChapIdx = 0;
+let currentPageObs = null, chapterTrackerObs = null, currentProgress = 0, progressSaveTimer = null;
+
+async function openComic(id) {
+  currentComicId = id;
+  showPage('readerPage');
+  document.getElementById('readerLoading').classList.remove('hidden');
+  document.getElementById('readerContent').innerHTML = '';
+  document.getElementById('readerTopbar').classList.remove('hidden-bar');
+  try {
+    const comics = await S.getAllComics();
+    const comic = comics.find(c => c.id === id);
+    if (!comic) throw new Error('漫画不存在');
+    document.getElementById('readerTitle').textContent = comic.name;
+
+    const rawBlob = await S.getComicData(id, comic.chunkCount || 1);
+    const zip = await JSZip.loadAsync(rawBlob);
+
+    const imgs = Object.keys(zip.files).filter(n => /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(n) && !zip.files[n].dir).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+    if (imgs.length === 0) { document.getElementById('readerLoading').classList.add('hidden'); document.getElementById('readerContent').innerHTML = '<div class="empty-state" style="color:#888;padding-top:40vh;"><p>😕 压缩包内未找到图片</p></div>'; return; }
+
+    // 封面生成
+    if (!comic.cover) {
+      try {
+        const fb = await zip.files[imgs[0]].async('blob');
+        await S.saveCover(id, await createThumbnail(fb, 120));
+      } catch {}
+    }
+
+    // 按话分组
+    const hasFolders = imgs.some(f => f.includes('/'));
+    if (hasFolders) {
+      const groups = {};
+      imgs.forEach(f => { const parts = f.split('/'); const chap = parts.length > 1 ? parts.slice(0, -1).join(' / ') : '(根目录)'; if (!groups[chap]) groups[chap] = []; groups[chap].push(f); });
+      currentChapters = Object.entries(groups).map(([name, files]) => ({ name, files }));
+    } else { currentChapters = [{ name: '', files: imgs }]; }
+
+    let globalPage = 0;
+    const totalPages = imgs.length;
+    document.getElementById('pageIndicator').textContent = '0/' + totalPages;
+    currentPages = [];
+    const content = document.getElementById('readerContent');
+    const visibleImgs = new Map();
+    const LOAD_AHEAD = 15;
+
+    for (let ci = 0; ci < currentChapters.length; ci++) {
+      const chap = currentChapters[ci];
+      if (chap.name) { const cs = document.createElement('div'); cs.className = 'chapter-separator'; cs.id = 'chap-' + ci; cs.textContent = chap.name; content.appendChild(cs); }
+      for (const fname of chap.files) {
+        globalPage++;
+        const sep = document.createElement('div'); sep.className = 'page-separator'; sep.textContent = '第 ' + globalPage + ' 页'; sep.dataset.page = globalPage; content.appendChild(sep);
+        const wrap = document.createElement('div'); wrap.className = 'page-img-wrap'; wrap.dataset.page = globalPage;
+        const img = document.createElement('img'); img.className = 'page-img'; img.dataset.fname = fname; img.dataset.page = globalPage; img.src = '';
+        img.addEventListener('dblclick', e => { e.preventDefault(); toggleZoom(wrap, img); });
+        wrap.appendChild(img); content.appendChild(wrap);
+      }
+      if (ci < currentChapters.length - 1 && chap.name) {
+        const nl = document.createElement('div'); nl.className = 'next-chapter-link'; nl.textContent = '↓ ' + currentChapters[ci + 1].name; nl.onclick = () => scrollToChapter(ci + 1); content.appendChild(nl);
+      }
+    }
+
+    // 按需加载
+    const lazyObs = new IntersectionObserver(entries => {
+      const toLoad = new Set(), toFree = new Set();
+      entries.forEach(e => { if (e.isIntersecting) { const p = parseInt(e.target.dataset.page); for (let i = p - LOAD_AHEAD; i <= p + LOAD_AHEAD; i++) { if (i >= 1 && i <= totalPages) toLoad.add(i); } } });
+      if (toLoad.size > 0) { const ml = Math.min(...toLoad), mx = Math.max(...toLoad); visibleImgs.forEach((_, p) => { if (p < ml - 5 || p > mx + 5) toFree.add(p); }); }
+      toFree.forEach(p => { const el = document.querySelector(`img[data-page="${p}"]`); if (el) { URL.revokeObjectURL(el.src); el.src = ''; } visibleImgs.delete(p); });
+      toLoad.forEach(p => { if (visibleImgs.has(p)) return; const el = document.querySelector(`img[data-page="${p}"]`); if (!el || el.src) return; zip.files[el.dataset.fname].async('blob').then(blob => { el.src = URL.createObjectURL(blob); visibleImgs.set(p, el.src); }).catch(() => {}); });
+    }, { rootMargin: '200px' });
+
+    document.querySelectorAll('.page-img-wrap').forEach(el => lazyObs.observe(el));
+    setTimeout(() => { const first = document.querySelector('.page-img-wrap'); if (first) { const p = parseInt(first.dataset.page); for (let i = p; i <= Math.min(p + LOAD_AHEAD, totalPages); i++) { const el = document.querySelector(`img[data-page="${i}"]`); if (el && !el.src && el.dataset.fname) { zip.files[el.dataset.fname].async('blob').then(blob => { el.src = URL.createObjectURL(blob); visibleImgs.set(i, el.src); }).catch(() => {}); } } } }, 100);
+    currentPages.push({ lazyObs });
+
+    document.getElementById('readerLoading').classList.add('hidden');
+    if (comic.progress > 0 && comic.progress <= totalPages) { const ts = document.querySelector(`.page-separator[data-page="${comic.progress}"]`); if (ts) setTimeout(() => ts.scrollIntoView({ behavior: 'instant' }), 100); }
+    setupProgressTracking(id, totalPages);
+    document.getElementById('readerContent').onclick = function(e) { if (e.target === this) document.getElementById('readerTopbar').classList.toggle('hidden-bar'); };
+    currentChapterTracker();
+    initScrollbar();
+  } catch (err) {
+    document.getElementById('readerLoading').classList.add('hidden');
+    document.getElementById('readerContent').innerHTML = '<div class="empty-state" style="color:#e74c3c;padding-top:40vh;"><p>❌ 加载失败<br><small>' + (err.message || err) + '</small></p></div>';
+    console.error(err);
+  }
+}
+
+// ===== 阅读器辅助 =====
+function toggleZoom(wrap, img) { if (wrap.classList.contains('zoomed')) { wrap.classList.remove('zoomed'); img.style.width = '100%'; } else { wrap.classList.add('zoomed'); img.style.width = 'auto'; img.style.maxWidth = 'none'; } }
+function setupProgressTracking(comicId, tp) { if (currentPageObs) currentPageObs.disconnect(); currentProgress = 0; currentPageObs = new IntersectionObserver(entries => { let maxV = 0; entries.forEach(e => { if (e.isIntersecting) { const p = parseInt(e.target.dataset.page); if (p > maxV) maxV = p; } }); if (maxV > 0) { currentProgress = maxV; document.getElementById('pageIndicator').textContent = maxV + '/' + tp; if (progressSaveTimer) clearTimeout(progressSaveTimer); progressSaveTimer = setTimeout(() => S.updateProgress(comicId, maxV).catch(() => {}), 1000); } }, { threshold: 0.5 }); document.querySelectorAll('.page-separator').forEach(el => currentPageObs.observe(el)); }
+function closeReader() { if (currentPageObs) { currentPageObs.disconnect(); currentPageObs = null; } if (chapterTrackerObs) { chapterTrackerObs.disconnect(); chapterTrackerObs = null; } if (progressSaveTimer) clearTimeout(progressSaveTimer); cleanupScrollbar(); if (currentComicId && currentProgress > 0) S.updateProgress(currentComicId, currentProgress).catch(() => {}); if (currentPages.length > 0 && currentPages[0].lazyObs) currentPages[0].lazyObs.disconnect(); currentPages = []; document.getElementById('readerContent').innerHTML = ''; document.getElementById('scrollbar').classList.remove('visible'); currentComicId = null; showComicList(); }
+function currentChapterTracker() { if (currentChapters.length <= 1) return; if (chapterTrackerObs) chapterTrackerObs.disconnect(); chapterTrackerObs = new IntersectionObserver(entries => { let bi = -1; entries.forEach(e => { if (e.isIntersecting) { const idx = parseInt(e.target.id.replace('chap-','')); if (idx > bi) bi = idx; } }); if (bi >= 0) { currentChapIdx = bi; if (currentChapters[currentChapIdx] && currentChapters[currentChapIdx].name) document.getElementById('readerTitle').textContent = currentChapters[currentChapIdx].name; } }, { threshold: 0.3 }); document.querySelectorAll('.chapter-separator').forEach(el => chapterTrackerObs.observe(el)); }
+function showChapterMenu() { if (currentChapters.length <= 1) return; document.querySelectorAll('.chapter-overlay').forEach(e => e.remove()); let dc = 0; const vt = window.scrollY + 70; document.querySelectorAll('.chapter-separator').forEach(el => { if (el.getBoundingClientRect().top + window.scrollY <= vt) dc = parseInt(el.id.replace('chap-','')); }); currentChapIdx = dc; const ov = document.createElement('div'); ov.className = 'chapter-overlay'; ov.onclick = function(e) { if (e.target === this) this.remove(); }; const m = document.createElement('div'); m.className = 'chapter-menu'; m.innerHTML = '<div class="chapter-menu-title">📋 目录</div>'; currentChapters.forEach((ch, i) => { const it = document.createElement('div'); it.className = 'chapter-menu-item' + (i === currentChapIdx ? ' current' : ''); it.innerHTML = '<span>' + (ch.name || '(单本)') + '</span><span class="badge">' + ch.files.length + '页</span>'; it.onclick = () => { ov.remove(); scrollToChapter(i); }; m.appendChild(it); }); const cb = document.createElement('div'); cb.className = 'chapter-menu-close'; cb.textContent = '关闭'; cb.onclick = () => ov.remove(); m.appendChild(cb); ov.appendChild(m); document.body.appendChild(ov); }
+function scrollToChapter(idx) { const el = document.getElementById('chap-' + idx); if (el) el.scrollIntoView({ behavior: 'smooth' }); }
+
+// ===== 快速滚动条 =====
+let scrollbarTimer = null, scrollbarListeners = null;
+function cleanupScrollbar() { if (scrollbarListeners) { window.removeEventListener('scroll', scrollbarListeners.scroll); document.removeEventListener('touchmove', scrollbarListeners.touchmove); document.removeEventListener('touchend', scrollbarListeners.touchend); scrollbarListeners = null; } clearTimeout(scrollbarTimer); }
+function initScrollbar() { cleanupScrollbar(); const track = document.getElementById('scrollbar'), thumb = document.getElementById('scrollbarThumb'); let dragging = false; function updateThumb() { const dh = document.documentElement.scrollHeight - window.innerHeight; if (dh <= 0) { track.classList.remove('visible'); return; } const ratio = window.scrollY / dh, th = track.clientHeight; const thH = Math.max(40, th * (window.innerHeight / document.documentElement.scrollHeight)); thumb.style.height = thH + 'px'; thumb.style.top = (th - thH) * ratio + 'px'; } function show() { track.classList.add('visible'); } function hideSoon() { if (!dragging) { clearTimeout(scrollbarTimer); scrollbarTimer = setTimeout(() => track.classList.remove('visible'), 1500); } } const os = () => { updateThumb(); show(); hideSoon(); }; const otm = e => { if (!dragging) return; e.preventDefault(); const t = e.touches[0], tr = track.getBoundingClientRect(), thH = thumb.clientHeight; const ratio = (t.clientY - tr.top - thH / 2) / (tr.height - thH); const dh = document.documentElement.scrollHeight - window.innerHeight; window.scrollTo(0, Math.max(0, Math.min(dh, ratio * dh))); }; const ote = () => { dragging = false; hideSoon(); }; window.addEventListener('scroll', os, { passive: true }); thumb.addEventListener('touchstart', () => { dragging = true; show(); }, { passive: true }); document.addEventListener('touchmove', otm, { passive: false }); document.addEventListener('touchend', ote); scrollbarListeners = { scroll: os, touchmove: otm, touchend: ote }; updateThumb(); setTimeout(() => hideSoon(), 2000); }
+
+// ===== 启动 =====
+window.__storageReady.then(s => {
+  S = s;
+  document.getElementById('searchInput').placeholder = '百度一下 · App';
+  document.getElementById('searchInput').focus();
+  console.log('📱 漫画阅读器 App — 原生存储就绪');
+});
+</script>
+</body>
+</html>

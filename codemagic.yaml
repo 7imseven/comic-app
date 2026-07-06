@@ -9,7 +9,7 @@
       - name: Install deps
         script: npm install
       - name: Sync iOS
-        script: npx cap sync ios
+        script: chmod -R +x node_modules/.bin && npx cap sync ios
       - name: Build IPA
         script: |
           cd ios/App

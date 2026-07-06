@@ -1,0 +1,6 @@
+﻿{
+  "appId": "com.reader.comic",
+  "appName": "百度",
+  "webDir": "www",
+  "ios": { "contentInset": "always" }
+}

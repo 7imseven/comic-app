@@ -18,7 +18,10 @@
         script: |
           cd ios/App
           xcodebuild -workspace App.xcworkspace -scheme App -sdk iphoneos -configuration Release -archivePath $PWD/build/App.xcarchive archive CODE_SIGNING_ALLOWED=NO
-          mkdir -p /tmp/output
-          xcodebuild -exportArchive -archivePath $PWD/build/App.xcarchive -exportOptionsPlist /dev/stdin -exportPath /tmp/output <<< '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>method</key><string>development</string></dict></plist>'
+          mkdir -p /tmp/output/Payload
+          cp -R $PWD/build/App.xcarchive/Products/Applications/App.app /tmp/output/Payload/
+          cd /tmp/output
+          zip -r App.ipa Payload
+          rm -rf Payload
     artifacts:
-      - /tmp/output/*.ipa
+      - /tmp/output/App.ipa

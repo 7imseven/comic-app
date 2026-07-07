@@ -12,6 +12,19 @@ const fs = USE_FS ? (await import('@capacitor/filesystem')).Filesystem : null;
 
 // ========== 元数据读写 ==========
 
+function openMetaDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('ComicVaultNative', 2);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'id', autoIncrement: true });
+      if (!db.objectStoreNames.contains('chunks')) db.createObjectStore('chunks', { keyPath: 'key' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = reject;
+  });
+}
+
 async function readMeta() {
   if (USE_FS) {
     try {
@@ -21,17 +34,12 @@ async function readMeta() {
   }
   // Web fallback: IndexedDB
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('ComicVaultNative', 1);
-    req.onupgradeneeded = () => {
-      req.result.createObjectStore('meta', { keyPath: 'id', autoIncrement: true });
-    };
-    req.onsuccess = () => {
-      const tx = req.result.transaction('meta', 'readonly');
+    openMetaDB().then(db => {
+      const tx = db.transaction('meta', 'readonly');
       const r = tx.objectStore('meta').getAll();
-      r.onsuccess = () => resolve(r.result);
+      r.onsuccess = () => { resolve(r.result); db.close(); };
       r.onerror = reject;
-    };
-    req.onerror = reject;
+    }).catch(reject);
   });
 }
 
@@ -42,16 +50,14 @@ async function writeMeta(list) {
   }
   // Web fallback
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('ComicVaultNative', 1);
-    req.onsuccess = () => {
-      const tx = req.result.transaction('meta', 'readwrite');
+    openMetaDB().then(db => {
+      const tx = db.transaction('meta', 'readwrite');
       const store = tx.objectStore('meta');
       store.clear();
       list.forEach(item => store.add(item));
-      tx.oncomplete = resolve;
+      tx.oncomplete = () => { resolve(); db.close(); };
       tx.onerror = reject;
-    };
-    req.onerror = reject;
+    }).catch(reject);
   });
 }
 
@@ -66,15 +72,12 @@ async function writeChunk(comicId, index, blob) {
     await fs.writeFile({ path: chunkPath(comicId, index), data: base64, directory: 'Data', recursive: true });
   } else {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open('ComicVaultNative', 1);
-      req.onsuccess = () => {
-        const tx = req.result.transaction('chunks', 'readwrite');
-        if (!req.result.objectStoreNames.contains('chunks')) { req.result.close(); resolve(); return; }
+      openMetaDB().then(db => {
+        const tx = db.transaction('chunks', 'readwrite');
         tx.objectStore('chunks').put({ key: comicId + '_' + index, data: blob });
-        tx.oncomplete = resolve; tx.onerror = reject;
-      };
-      req.onupgradeneeded = () => { req.result.createObjectStore('chunks', { keyPath: 'key' }); };
-      req.onerror = reject;
+        tx.oncomplete = () => { resolve(); db.close(); };
+        tx.onerror = reject;
+      }).catch(reject);
     });
   }
 }
@@ -88,14 +91,12 @@ async function readChunk(comicId, index) {
     return new Blob([bytes]);
   }
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('ComicVaultNative', 1);
-    req.onsuccess = () => {
-      const tx = req.result.transaction('chunks', 'readonly');
+    openMetaDB().then(db => {
+      const tx = db.transaction('chunks', 'readonly');
       const r = tx.objectStore('chunks').get(comicId + '_' + index);
-      r.onsuccess = () => resolve(r.result ? r.result.data : null);
+      r.onsuccess = () => { resolve(r.result ? r.result.data : null); db.close(); };
       r.onerror = reject;
-    };
-    req.onerror = reject;
+    }).catch(reject);
   });
 }
 

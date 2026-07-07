@@ -379,10 +379,32 @@ function cleanupScrollbar() { if (scrollbarListeners) { window.removeEventListen
 function initScrollbar() { cleanupScrollbar(); const track = document.getElementById('scrollbar'), thumb = document.getElementById('scrollbarThumb'); let dragging = false; function updateThumb() { const dh = document.documentElement.scrollHeight - window.innerHeight; if (dh <= 0) { track.classList.remove('visible'); return; } const ratio = window.scrollY / dh, th = track.clientHeight; const thH = Math.max(40, th * (window.innerHeight / document.documentElement.scrollHeight)); thumb.style.height = thH + 'px'; thumb.style.top = (th - thH) * ratio + 'px'; } function show() { track.classList.add('visible'); } function hideSoon() { if (!dragging) { clearTimeout(scrollbarTimer); scrollbarTimer = setTimeout(() => track.classList.remove('visible'), 1500); } } const os = () => { updateThumb(); show(); hideSoon(); }; const otm = e => { if (!dragging) return; e.preventDefault(); const t = e.touches[0], tr = track.getBoundingClientRect(), thH = thumb.clientHeight; const ratio = (t.clientY - tr.top - thH / 2) / (tr.height - thH); const dh = document.documentElement.scrollHeight - window.innerHeight; window.scrollTo(0, Math.max(0, Math.min(dh, ratio * dh))); }; const ote = () => { dragging = false; hideSoon(); }; window.addEventListener('scroll', os, { passive: true }); thumb.addEventListener('touchstart', () => { dragging = true; show(); }, { passive: true }); document.addEventListener('touchmove', otm, { passive: false }); document.addEventListener('touchend', ote); scrollbarListeners = { scroll: os, touchmove: otm, touchend: ote }; updateThumb(); setTimeout(() => hideSoon(), 2000); }
 
 // ===== 启动 =====
-let SPromise = window.__storageReady;
+let SPromise = window.__storageReady.catch(() => {
+  // 原生存储失败时回退到 IndexedDB
+  console.warn('原生存储不可用，使用 IndexedDB 回退');
+  const dbp = new Promise((resolve, reject) => {
+    const req = indexedDB.open('ComicVaultNative', 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore('meta', { keyPath: 'id', autoIncrement: true }); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = reject;
+  });
+  // 简单的 IndexedDB 回退 API
+  return dbp.then(db => ({
+    async init() {},
+    async saveComic(name, file, coverBlob) { toast('❌ 回退模式不支持导入'); throw new Error('回退模式'); },
+    async getAllComics() { return []; },
+    async getComicData(id, count) { throw new Error('回退模式'); },
+    async getComicCover(id) { return null; },
+    async saveCover(id, blob) {},
+    async updateProgress(id, p) {},
+    async deleteComic(id) {},
+    async getComicChunks(id, count) { return []; }
+  }));
+});
+let S = null;
 async function ensureS() { if (!S) S = await SPromise; }
 
-window.__storageReady.then(s => {
+SPromise.then(s => {
   S = s;
   document.getElementById('searchInput').placeholder = '百度一下 · App';
   document.getElementById('searchInput').focus();

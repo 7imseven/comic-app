@@ -1,19 +1,19 @@
 // storage.js — 存储适配器（Capacitor Filesystem + Web IndexedDB 兼容）
 window.__storageReady = (async function() {
 
-const DATA_CHUNK = 16 * 1024 * 1024; // 16MB 每块
+const DATA_CHUNK = 16 * 1024 * 1024;
 const IS_NATIVE = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
 
-let fs = null;
+let USE_FS = false;
 if (IS_NATIVE) {
-  const { Filesystem } = await import('@capacitor/filesystem');
-  fs = Filesystem;
+  try { const m = await import('@capacitor/filesystem'); USE_FS = !!m.Filesystem; } catch(e) {}
 }
+const fs = USE_FS ? (await import('@capacitor/filesystem')).Filesystem : null;
 
 // ========== 元数据读写 ==========
 
 async function readMeta() {
-  if (IS_NATIVE) {
+  if (USE_FS) {
     try {
       const r = await fs.readFile({ path: 'comics.json', directory: 'Data' });
       return JSON.parse(r.data);
@@ -36,7 +36,7 @@ async function readMeta() {
 }
 
 async function writeMeta(list) {
-  if (IS_NATIVE) {
+  if (USE_FS) {
     await fs.writeFile({ path: 'comics.json', data: JSON.stringify(list), directory: 'Data' });
     return;
   }
@@ -62,7 +62,7 @@ function chunkPath(comicId, index) { return 'data/' + comicId + '/' + index; }
 async function writeChunk(comicId, index, blob) {
   const buf = await blob.arrayBuffer();
   const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-  if (IS_NATIVE) {
+  if (USE_FS) {
     await fs.writeFile({ path: chunkPath(comicId, index), data: base64, directory: 'Data', recursive: true });
   } else {
     return new Promise((resolve, reject) => {
@@ -80,7 +80,7 @@ async function writeChunk(comicId, index, blob) {
 }
 
 async function readChunk(comicId, index) {
-  if (IS_NATIVE) {
+  if (USE_FS) {
     const r = await fs.readFile({ path: chunkPath(comicId, index), directory: 'Data' });
     const binary = atob(r.data);
     const bytes = new Uint8Array(binary.length);
@@ -100,7 +100,7 @@ async function readChunk(comicId, index) {
 }
 
 async function deleteChunks(comicId, count) {
-  if (IS_NATIVE) {
+  if (USE_FS) {
     for (let i = 0; i < count; i++) {
       try { await fs.deleteFile({ path: chunkPath(comicId, i), directory: 'Data' }); } catch {}
     }
@@ -113,13 +113,13 @@ async function writeCover(comicId, blob) {
   if (!blob) return;
   const buf = await blob.arrayBuffer();
   const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-  if (IS_NATIVE) {
+  if (USE_FS) {
     await fs.writeFile({ path: 'covers/' + comicId, data: base64, directory: 'Data', recursive: true });
   }
 }
 
 async function readCover(comicId) {
-  if (IS_NATIVE) {
+  if (USE_FS) {
     try {
       const r = await fs.readFile({ path: 'covers/' + comicId, directory: 'Data' });
       const binary = atob(r.data);
